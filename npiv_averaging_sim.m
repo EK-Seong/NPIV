@@ -73,9 +73,11 @@ ylim([-0.2,0.6])
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%% Monte-Carlo Simulation : n = 200 %%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Monte-Carlo Simulation : n = 200 %%%%%%%%%
+%%%%% Comparing finite sample performances %%%%%
+%%%%% of NPIV and IV %%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 rng("default")
 rep = 100;    % number of repetition
 n = 200;    % number of obs.
@@ -181,4 +183,108 @@ legend 'NPIV' 'IV' 'OLS' 'obs'
 ylim([-0.2,0.6])
 
 
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%% Averaging Estimator %%%%%%%%%%%%%%%%%
+%%%%% Different Truncation parameters %%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+
+rng("default")  % fix seed for replicability
+rep = 100;    % number of repetition
+n = 200;    % number of obs.
+
+% pre-allocate matrices for saving the estimates at each rep
+rmse_npiv = zeros(rep,3);   % rmse for npiv's
+rmse_aver = zeros(rep,1);
+G_hat_cell = cell(3,1); % The Fourier coef's
+G_hat_cell{1,1} = zeros(rep,2);
+G_hat_cell{2,1} = zeros(rep,3);
+G_hat_cell{3,1} = zeros(rep,4);
+J_dist = zeros(rep,3);  % J-statistics
+
+for r = 1:rep
+
+    % Randomly draw the Simulation samples with replacement
+    D = datasample(dataset,n,1,"Replace",true);     
+    Y = D(:,1);
+    X = D(:,2);
+    Z = D(:,3);
+    
+    % Transform X and Z to Unit Interval
+    minx = min(X);
+    rangeX = max(X) - minx;
+    minz = min(Z);
+    rangeZ = max(Z) - minz;
+    X = (X - minx) ./ rangeX;
+    Z = (Z - minz) ./ rangeZ;
+    
+    % index of population matrix that stores value of i-th obs.
+    index = zeros(n,1);      
+    for i = 1:n
+        pop_index =  find(population(:,2)==D(i,2));
+        index(i,1) = pop_index(1,1);
+    end
+
+    % repeat for each truncation parameter K
+    g_fit_mat = zeros(n,3); % To store the fitted valued of each K
+    Jk = zeros(1,3);        % To store the J-stat of each K
+    for K = 2:4
+
+        % define a Legendre polynomial basis for L2[0,1]       
+        MX = zeros(n,K);
+        for i=1:K
+            if i == 1
+                MX(:,i) = ones(n,1);
+            elseif mod(i,2) == 0
+                MX(:,i) = sqrt(2)*sin(floor((i)/2)*(X.*2*pi));
+            else
+                MX(:,i) = sqrt(2)*cos(floor((i)/2)*(X.*2*pi));
+            end
+        end
+        
+        % To make the estimation problem over-identified, we add one more dimension to MZ
+        MZ = zeros(n,K+1);  
+        for i=1:K+1
+            if i == 1
+                MZ(:,i) = ones(n,1);
+            elseif mod(i,2) == 0
+                MZ(:,i) = sqrt(2)*sin(floor((i)/2)*(Z.*2*pi));
+            else
+                MZ(:,i) = sqrt(2)*cos(floor((i)/2)*(Z.*2*pi));
+            end
+        end
+
+        % NPIV estimate
+        G_hat = ((MX'*MZ)\(MZ'*MZ)/(MZ'*MX))\((MX'*MZ)\(MZ'*MZ)/(MZ'*Y));   % the 2SLS version
+        G_hat{K-1,1}(r,:) = G_hat;  % store G_hat's for each K
+        g_fit = MX*G_hat;
+        g_fit_mat(:,K-1) = g_fit;   % store the fitted values
+
+        % RMSE of NPIV
+        error = g_fit - population(index,4);
+        rmse_npiv(r,K-1) = sqrt(mean(error.^2));
+
+        Mgn = (MZ'*(Y-g_fit))/n;    % sample analog of the (misspecified) moment condition.
+        Jn = Mgn'\((MZ'*MZ)/n)/Mgn; % J-statistic
+        J_dist(r,K-1) = Jn;
+        Jk(1,K-1) = Jn;
+    end
+
+    % Now, we compute the average estimator.
+    % Compute the weights
+    omega1 = (1-(Jk(1,1)/sum(Jk,"all")))/2;
+    omega2 = (1-(Jk(1,2)/sum(Jk,"all")))/2;
+    omega3 = (1-(Jk(1,3)/sum(Jk,"all")))/2;
+    % Compute the averaging estimator.
+    g_aver = omega1*g_fit_mat(:,1)+omega2*g_fit_mat(:,2)+omega3*g_fit_mat(:,3);
+
+    % RMSE of the Averaging NPIV
+    error = g_aver - population(index,4);
+    rmse_aver(r,1) = sqrt(mean(error.^2));
+end
+
+
+RMSEs = zeros(4,1);
+RMSEs(1:3,1) = mean(rmse_npiv,1);
+RMSEs(4,1) = mean(rmse_aver,1);
