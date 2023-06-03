@@ -26,7 +26,6 @@ minz = min(Z);
 rangeZ = max(Z) - minz;
 X = (X - minx) ./ rangeX;
 Z = (Z - minz) ./ rangeZ;
-UIpopulation = [Y,X,Z];
 
 % define a Legendre polynomial basis for L2[0,1]
 
@@ -63,10 +62,9 @@ beta0 = (Xmat'*Xmat)\(Xmat'*Y);
 Y_OLS0 = Xmat*beta0;
 
 population = [population,g_true,Y_IV0];     % population matrix
-UIpopulation = [UIpopulation,g_true,Y_IV0]; % population transformed to unit interval     
 
-figure
-plot(X,g_true,'.',X,Y_IV0,'.',X,Y_OLS0,'.',X,Y,'.')
+figure(1)
+plot(population(:,2),g_true,'.',population(:,2),Y_IV0,'.',population(:,2),Y_OLS0,'.',population(:,2),Y,'.')
 legend 'NPIV' 'IV' 'OLS' 'obs'
 ylim([-0.2,0.6])
 
@@ -82,7 +80,7 @@ rng("default")
 rep = 100;    % number of repetition
 n = 200;    % number of obs.
 
-K = 3;  % truncation parameter - should be dependent on the data. For now I just fix it.
+K = 2;  % truncation parameter - should be dependent on the data. For now I just fix it.
 
 beta_iv_dist = zeros(rep,2);
 G_hat_dist = zeros(rep,K);
@@ -178,7 +176,7 @@ beta = (Xmat'*Xmat)\(Xmat'*Y);
 Y_OLS = Xmat*beta;
 
 figure
-plot(X,g_fit,'.',X,Y_IV,'.',X,Y_OLS,'.',X,Y,'.')
+plot(D(:,2),g_fit,'.',D(:,2),Y_IV,'.',D(:,2),Y_OLS,'.',D(:,2),Y,'.')
 legend 'NPIV' 'IV' 'OLS' 'obs'
 ylim([-0.2,0.6])
 
@@ -191,12 +189,13 @@ ylim([-0.2,0.6])
 
 
 rng("default")  % fix seed for replicability
-rep = 100;    % number of repetition
-n = 200;    % number of obs.
+rep = 5000;    % number of repetition
+n = 20000;    % number of obs.
 
 % pre-allocate matrices for saving the estimates at each rep
 rmse_npiv = zeros(rep,3);   % rmse for npiv's
-rmse_aver = zeros(rep,1);
+rmse_aver = zeros(rep,1);   % rmse for averaging 3 estimators
+rmse_aver1 = zeros(rep,1);  % rsme for averaging 2 estimators
 G_hat_cell = cell(3,1); % The Fourier coef's
 G_hat_cell{1,1} = zeros(rep,2);
 G_hat_cell{2,1} = zeros(rep,3);
@@ -256,8 +255,8 @@ for r = 1:rep
         end
 
         % NPIV estimate
-        G_hat = ((MX'*MZ)\(MZ'*MZ)/(MZ'*MX))\((MX'*MZ)\(MZ'*MZ)/(MZ'*Y));   % the 2SLS version
-        G_hat{K-1,1}(r,:) = G_hat;  % store G_hat's for each K
+        G_hat = (((MX'*MZ)/(MZ'*MZ))*(MZ'*MX))\(((MX'*MZ)/(MZ'*MZ))*(MZ'*Y));   % the 2SLS version
+        G_hat_cell{K-1,1}(r,:) = G_hat;  % store G_hat's for each K
         g_fit = MX*G_hat;
         g_fit_mat(:,K-1) = g_fit;   % store the fitted values
 
@@ -266,12 +265,13 @@ for r = 1:rep
         rmse_npiv(r,K-1) = sqrt(mean(error.^2));
 
         Mgn = (MZ'*(Y-g_fit))/n;    % sample analog of the (misspecified) moment condition.
-        Jn = Mgn'\((MZ'*MZ)/n)/Mgn; % J-statistic
+        Jn = (Mgn'/((MZ'*MZ)/n))*Mgn; % J-statistic
         J_dist(r,K-1) = Jn;
         Jk(1,K-1) = Jn;
     end
 
     % Now, we compute the average estimator.
+    %Jk = Jk.^(5);
     % Compute the weights
     omega1 = (1-(Jk(1,1)/sum(Jk,"all")))/2;
     omega2 = (1-(Jk(1,2)/sum(Jk,"all")))/2;
@@ -282,9 +282,26 @@ for r = 1:rep
     % RMSE of the Averaging NPIV
     error = g_aver - population(index,4);
     rmse_aver(r,1) = sqrt(mean(error.^2));
+
+    % 2. Averaging 2 estimators
+    omega5 = (1-Jk(1,1)/(Jk(1,1)+Jk(1,2)));
+    omega6 = (1-Jk(1,2)/(Jk(1,1)+Jk(1,2)));
+    g_aver1 = omega5*g_fit_mat(:,1)+omega6*g_fit_mat(:,2);
+
+    error = g_aver1 - population(index,4);
+    rmse_aver1(r,1) = sqrt(mean(error.^2));
+
+%     figure(8), hold on
+%     plot(D(:,2),g_aver1,'b.', ...
+%         population(:,2),g_true,'.r')
+%     ylim([-0.1,0.6])
 end
 
 
 RMSEs = zeros(4,1);
 RMSEs(1:3,1) = mean(rmse_npiv,1);
 RMSEs(4,1) = mean(rmse_aver,1);
+
+RMSEs1 = zeros(3,1);
+RMSEs1(1:2,1) = mean(rmse_npiv(:,1:2),1);
+RMSEs1(3,1) = mean(rmse_aver1,1);
