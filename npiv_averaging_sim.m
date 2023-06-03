@@ -26,6 +26,7 @@ minz = min(Z);
 rangeZ = max(Z) - minz;
 X = (X - minx) ./ rangeX;
 Z = (Z - minz) ./ rangeZ;
+UIpopulation = [Y,X,Z];
 
 % define a Legendre polynomial basis for L2[0,1]
 
@@ -61,7 +62,8 @@ Y_IV0 = Xmat*betaIV0;
 beta0 = (Xmat'*Xmat)\(Xmat'*Y);
 Y_OLS0 = Xmat*beta0;
 
-population = [population,g_true,Y_IV0];   % population matrix
+population = [population,g_true,Y_IV0];     % population matrix
+UIpopulation = [UIpopulation,g_true,Y_IV0]; % population transformed to unit interval     
 
 figure
 plot(X,g_true,'.',X,Y_IV0,'.',X,Y_OLS0,'.',X,Y,'.')
@@ -75,8 +77,8 @@ ylim([-0.2,0.6])
 %%%%% Monte-Carlo Simulation : n = 200 %%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 rng("default")
-rep = 5000;    % number of repetition
-n = 5000;    % number of obs.
+rep = 100;    % number of repetition
+n = 200;    % number of obs.
 
 K = 3;  % truncation parameter - should be dependent on the data. For now I just fix it.
 
@@ -158,12 +160,14 @@ for r = 1:rep
     % legend 'NPIV' 'IV' 'OLS' 'obs'
     % ylim([-0.2,0.6])
 
+
 end
 
-mean(rmse_iv)
-mean(rmse_npiv)
-std(beta_iv_dist)
-std(G_hat_dist)
+results = zeros(4,3);
+results(1,1:2) = mean(rmse_iv);
+results(2,1) = mean(rmse_npiv);
+results(3,1:2) = std(beta_iv_dist);
+results(4,1:2) = std(G_hat_dist);
 
 
 
